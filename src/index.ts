@@ -3,8 +3,8 @@ import { Hono } from "hono";
 import { tasksRouter } from "./endpoints/tasks/router";
 import { ContentfulStatusCode } from "hono/utils/http-status";
 import { DummyEndpoint } from "./endpoints/dummyEndpoint";
-import { vkHandler, VkWebhookRoute } from './endpoints/vkEndpoint';
-import { vkLogsHandler, VkLogsRoute } from './endpoints/vkLogs';
+import { VkWebhookRoute } from './endpoints/vkEndpoint';
+import { VkLogsRoute } from './endpoints/vkLogs';
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
@@ -47,8 +47,8 @@ openapi.route("/tasks", tasksRouter);
 
 // Register other endpoints
 openapi.post("/dummy/:slug", DummyEndpoint);
-openapi.openapi(VkWebhookRoute).post('/vk', vkHandler);
-openapi.openapi(VkLogsRoute).get('/vk/logs', vkLogsHandler);
+openapi.openapi(VkWebhookRoute).post('/vk', VkWebhookRoute.handle);   // или просто VkWebhookRoute
+openapi.openapi(VkLogsRoute).get('/vk/logs', VkLogsRoute.handle);
 
 
 
