@@ -1,70 +1,69 @@
 // src/endpoints/vkEndpoint.ts
-import { createRoute } from 'chanfana';
+import { OpenAPIRoute } from 'chanfana';
 import { z } from 'zod';
 import type { Context } from 'hono';
 
-const AnyVKEvent = z.object({
+const AnyVKEventSchema = z.object({
     type: z.string(),
     group_id: z.number().optional(),
     secret: z.string().optional(),
-    object: z.record(z.any()).optional(),   // любой payload
-}).passthrough(); // разрешает все остальные поля
+    object: z.record(z.any()).optional(),
+}).passthrough();
 
-export const VkWebhookRoute = createRoute({
-    method: 'post',
-    path: '/vk',
-    summary: 'VK Callback API Webhook',
-    tags: ['VK'],
-    request: {
-        body: {
-            content: {
-                'application/json': {
-                    schema: AnyVKEvent,
+export class VkWebhookRoute extends OpenAPIRoute {
+    static schema = {
+        method: 'post',
+        path: '/vk',
+        summary: 'VK Callback API Webhook',
+        tags: ['VK'],
+        request: {
+            body: {
+                content: {
+                    'application/json': {
+                        schema: AnyVKEventSchema,
+                    },
                 },
             },
         },
-    },
-    responses: {
-        200: { description: 'OK', content: { 'text/plain': { schema: z.string() } } },
-    },
-});
+        responses: {
+            200: {
+                description: 'Success',
+                content: { 'text/plain': { schema: z.string() } },
+            },
+        },
+    };
 
-export const vkHandler = async (c: Context<{ Bindings: Env }>) => {
-    try {
-        const body = await c.req.json();
-        const rawBody = JSON.stringify(body);
+    async handle(c: Context<{ Bindings: Env }>) {
+        try {
+            const body = await c.req.json();
+            const rawBody = JSON.stringify(body);
 
-        console.log(`VK Event: ${body.type}`, body);
+            console.log(`VK Event: ${body.type}`, body);
 
-        // === Сохранение ВСЕГО в базу ===
-        await c.env.DB.prepare(`
-            INSERT INTO vk_webhooks 
-            (type, group_id, raw_body)
-            VALUES (?, ?, ?)
-        `).bind(
-            body.type || 'unknown',
-            body.group_id || null,
-            rawBody
-        ).run();
+            // Сохраняем в D1
+            await c.env.DB.prepare(`
+                INSERT INTO vk_webhooks (type, group_id, raw_body)
+                VALUES (?, ?, ?)
+            `).bind(
+                body.type || 'unknown',
+                body.group_id || null,
+                rawBody
+            ).run();
 
-        // Подтверждение адреса сервера
-        if (body.type === 'confirmation') {
-            return c.text('4cb3749b');
+            if (body.type === 'confirmation') {
+                return c.text('4cb3749b');
+            }
+
+            return c.text('ok');
+        } catch (err: any) {
+            console.error('VK webhook error:', err);
+
+            await c.env.DB.prepare(`
+                INSERT INTO vk_webhooks (type, raw_body) 
+                VALUES ('error', ?)
+            `).bind(err.message?.slice(0, 500) || 'unknown error').run();
+
+            return c.text('error', 500);
         }
-
-        // TODO: Здесь потом будешь обрабатывать разные типы
-        // if (body.type === 'message_new') { ... }
-
-        return c.text('ok');
-
-    } catch (err: any) {
-        console.error(err);
-
-        await c.env.DB.prepare(`
-            INSERT INTO vk_webhooks (type, raw_body) 
-            VALUES ('error', ?)
-        `).bind(err.message?.slice(0, 1000) || 'Parse error').run();
-
-        return c.text('error', 500);
     }
-};
+}
