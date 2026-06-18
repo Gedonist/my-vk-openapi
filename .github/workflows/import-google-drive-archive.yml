@@ -1,0 +1,90 @@
+name: Import Google Drive archive
+
+on:
+  workflow_dispatch:
+    inputs:
+      google_drive_file_id:
+        description: "Google Drive file ID with a ZIP archive. If omitted, vars.GOOGLE_DRIVE_FILE_ID is used."
+        required: false
+        type: string
+      commit_message:
+        description: "Commit message"
+        required: false
+        default: "Import archive from Google Drive"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  import-archive:
+    runs-on: ubuntu-latest
+    env:
+      FILE_ID: ${{ inputs.google_drive_file_id || vars.GOOGLE_DRIVE_FILE_ID }}
+      COMMIT_MESSAGE: ${{ inputs.commit_message || 'Import archive from Google Drive' }}
+    steps:
+      - name: Validate input
+        run: |
+          if [ -z "$FILE_ID" ]; then
+            echo "Provide google_drive_file_id input or set repository variable GOOGLE_DRIVE_FILE_ID." >&2
+            exit 1
+          fi
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.REPO_PAT || github.token }}
+
+      - name: Download archive from Google Drive
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gdrive-import
+          URL="https://drive.google.com/uc?export=download&id=${FILE_ID}"
+          curl -L --fail --retry 3 --cookie /tmp/gdrive-cookie.txt --cookie-jar /tmp/gdrive-cookie.txt "$URL" -o /tmp/gdrive-import/response.html
+          CONFIRM=$(grep -o 'confirm=[^&]*' /tmp/gdrive-import/response.html | head -n 1 | cut -d= -f2 || true)
+          if file /tmp/gdrive-import/response.html | grep -qi 'zip archive'; then
+            mv /tmp/gdrive-import/response.html /tmp/gdrive-import/archive.zip
+          elif [ -n "$CONFIRM" ]; then
+            curl -L --fail --retry 3 --cookie /tmp/gdrive-cookie.txt "https://drive.google.com/uc?export=download&confirm=${CONFIRM}&id=${FILE_ID}" -o /tmp/gdrive-import/archive.zip
+          else
+            echo "Downloaded file is not a ZIP archive. Check file ID and sharing settings." >&2
+            head -c 1000 /tmp/gdrive-import/response.html >&2 || true
+            exit 1
+          fi
+          unzip -t /tmp/gdrive-import/archive.zip
+
+      - name: Unpack archive into repository
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/gdrive-import/unpacked
+          mkdir -p /tmp/gdrive-import/unpacked
+          unzip -q /tmp/gdrive-import/archive.zip -d /tmp/gdrive-import/unpacked
+
+          SRC=/tmp/gdrive-import/unpacked
+          ITEM_COUNT=$(find "$SRC" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')
+          if [ "$ITEM_COUNT" = "1" ]; then
+            ONLY_ITEM=$(find "$SRC" -mindepth 1 -maxdepth 1 | head -n 1)
+            if [ -d "$ONLY_ITEM" ]; then
+              SRC="$ONLY_ITEM"
+            fi
+          fi
+
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github/workflows/import-google-drive-archive.yml' \
+            "$SRC"/ "$GITHUB_WORKSPACE"/
+
+      - name: Commit and push changes
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "$COMMIT_MESSAGE"
+          git push origin HEAD:main
+          
