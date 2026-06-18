@@ -1,72 +1,192 @@
-# OpenAPI Template
+# VK Callback API Worker
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/templates/tree/main/chanfana-openapi-template)
+Cloudflare Worker принимает события VK Callback API, сохраняет весь входящий JSON в D1 и отправляет простые шаблонные ответы пользователю через `messages.send`.
 
-![OpenAPI Template Preview](https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/91076b39-1f5b-46f6-7f14-536a6f183000/public)
+## Что реализовано
 
-<!-- dash-content-start -->
+- `POST /vk` — webhook для VK Callback API.
+- `GET /vk/logs` — просмотр сохраненных callback-событий, защищен токеном.
+- Проверка `secret` из VK Callback API через секрет `VK_SECRET_TOKEN`.
+- Код подтверждения Callback API берется из секрета `VK_CONFIRMATION_CODE`.
+- Все входящие события пишутся в таблицу `vk_webhooks`, включая ошибочные и события с неверным секретом.
+- Для `message_new` определяется тип сообщения и готовится шаблонный ответ:
+  - текст: `Вижу пришел текст: ...`
+  - картинка: `Вижу пришла картинка`
+  - голосовое: `Вижу пришло голосовое`
+  - файл: `Вижу пришел файл`
+  - видео, аудио, стикер, ссылка и неизвестный тип.
+- Если задан `VK_GROUP_ACCESS_TOKEN`, Worker отправляет шаблонный ответ в VK через `messages.send`.
+- Ручной GitHub Action `.github/workflows/import-google-drive-archive.yml` скачивает ZIP-архив с Google Drive, распаковывает его в репозиторий и коммитит изменения в `main`.
 
-This is a Cloudflare Worker with OpenAPI 3.1 Auto Generation and Validation using [chanfana](https://github.com/cloudflare/chanfana) and [Hono](https://github.com/honojs/hono).
+## Переменные и секреты
 
-This is an example project made to be used as a quick start into building OpenAPI compliant Workers that generates the
-`openapi.json` schema automatically from code and validates the incoming request to the defined parameters or request body.
-
-This template includes various endpoints, a D1 database, and integration tests using [Vitest](https://vitest.dev/) as examples. In endpoints, you will find [chanfana D1 AutoEndpoints](https://chanfana.com/endpoints/auto/d1) and a [normal endpoint](https://chanfana.com/endpoints/defining-endpoints) to serve as examples for your projects.
-
-Besides being able to see the OpenAPI schema (openapi.json) in the browser, you can also extract the schema locally no hassle by running this command `npm run schema`.
-
-<!-- dash-content-end -->
-
-> [!IMPORTANT]
-> When using C3 to create this project, select "no" when it asks if you want to deploy. You need to follow this project's [setup steps](https://github.com/cloudflare/templates/tree/main/openapi-template#setup-steps) before deploying.
-
-## Getting Started
-
-Outside of this repo, you can start a new project with this template using [C3](https://developers.cloudflare.com/pages/get-started/c3/) (the `create-cloudflare` CLI):
+### Cloudflare Worker secrets
 
 ```bash
-npm create cloudflare@latest -- --template=cloudflare/templates/openapi-template
+npx wrangler secret put API_AUTH_TOKEN
+npx wrangler secret put VK_CONFIRMATION_CODE
+npx wrangler secret put VK_SECRET_TOKEN
+npx wrangler secret put VK_GROUP_ACCESS_TOKEN
 ```
 
-A live public deployment of this template is available at [https://openapi-template.templates.workers.dev](https://openapi-template.templates.workers.dev)
+`VK_GROUP_ACCESS_TOKEN` нужен только если Worker должен сам отправлять ответы пользователям. Без него события все равно сохраняются в D1, а подготовленный ответ пишется в `response_text`.
 
-## Setup Steps
-
-1. Install the project dependencies with a package manager of your choice:
-   ```bash
-   npm install
-   ```
-2. Create a [D1 database](https://developers.cloudflare.com/d1/get-started/) with the name "openapi-template-db":
-   ```bash
-   npx wrangler d1 create openapi-template-db
-   ```
-   ...and update the `database_id` field in `wrangler.json` with the new database ID.
-3. Run the following db migration to initialize the database (notice the `migrations` directory in this project):
-   ```bash
-   npx wrangler d1 migrations apply DB --remote
-   ```
-4. Deploy the project!
-   ```bash
-   npx wrangler deploy
-   ```
-5. Monitor your worker
-   ```bash
-   npx wrangler tail
-   ```
-
-## Testing
-
-This template includes integration tests using [Vitest](https://vitest.dev/). To run the tests locally:
+Опционально можно задать версию VK API:
 
 ```bash
-npm run test
+npx wrangler secret put VK_API_VERSION
 ```
 
-Test files are located in the `tests/` directory, with examples demonstrating how to test your endpoints and database interactions.
+### GitHub Actions
 
-## Project structure
+Для ручного импорта архива с Google Drive:
 
-1. Your main router is defined in `src/index.ts`.
-2. Each endpoint has its own file in `src/endpoints/`.
-3. Integration tests are located in the `tests/` directory.
-4. For more information read the [chanfana documentation](https://chanfana.com/), [Hono documentation](https://hono.dev/docs), and [Vitest documentation](https://vitest.dev/guide/).
+- repository variable `GOOGLE_DRIVE_FILE_ID` — ID ZIP-файла на Google Drive, если не хотите вводить ID при каждом запуске workflow;
+- repository secret `REPO_PAT` — опциональный PAT для коммита в `main`. Если секрет не задан, workflow использует стандартный `GITHUB_TOKEN` с `contents: write`.
+
+Файл на Google Drive должен быть доступен workflow. Для публичного файла достаточно доступа по ссылке.
+
+## Установка и запуск
+
+```bash
+npm install
+npx wrangler d1 create openapi-db
+```
+
+После создания D1 замените `database_id` в `wrangler.jsonc`.
+
+```bash
+npm run migrate:remote
+npm run deploy
+```
+
+Локально:
+
+```bash
+npm run migrate:local
+npm run dev
+```
+
+Тесты:
+
+```bash
+npm test
+```
+
+## Примеры curl
+
+Замените `https://example.workers.dev` на адрес вашего Worker.
+
+### Проверка confirmation
+
+```bash
+curl -i -X POST 'https://example.workers.dev/vk' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "type": "confirmation",
+    "group_id": 123,
+    "secret": "<VK_SECRET_TOKEN>"
+  }'
+```
+
+Ответом должен быть текст из `VK_CONFIRMATION_CODE`.
+
+### Текстовое сообщение
+
+```bash
+curl -i -X POST 'https://example.workers.dev/vk' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "type": "message_new",
+    "group_id": 123,
+    "secret": "<VK_SECRET_TOKEN>",
+    "object": {
+      "message": {
+        "id": 1001,
+        "from_id": 456,
+        "peer_id": 456,
+        "text": "Привет"
+      }
+    }
+  }'
+```
+
+### Картинка
+
+```bash
+curl -i -X POST 'https://example.workers.dev/vk' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "type": "message_new",
+    "group_id": 123,
+    "secret": "<VK_SECRET_TOKEN>",
+    "object": {
+      "message": {
+        "id": 1002,
+        "from_id": 456,
+        "peer_id": 456,
+        "attachments": [{ "type": "photo" }]
+      }
+    }
+  }'
+```
+
+### Голосовое
+
+```bash
+curl -i -X POST 'https://example.workers.dev/vk' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "type": "message_new",
+    "group_id": 123,
+    "secret": "<VK_SECRET_TOKEN>",
+    "object": {
+      "message": {
+        "id": 1003,
+        "from_id": 456,
+        "peer_id": 456,
+        "attachments": [{ "type": "audio_message" }]
+      }
+    }
+  }'
+```
+
+### Файл
+
+```bash
+curl -i -X POST 'https://example.workers.dev/vk' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "type": "message_new",
+    "group_id": 123,
+    "secret": "<VK_SECRET_TOKEN>",
+    "object": {
+      "message": {
+        "id": 1004,
+        "from_id": 456,
+        "peer_id": 456,
+        "attachments": [{ "type": "doc" }]
+      }
+    }
+  }'
+```
+
+### Просмотр логов
+
+```bash
+curl -i 'https://example.workers.dev/vk/logs?limit=20' \
+  -H 'Authorization: Bearer <API_AUTH_TOKEN>'
+```
+
+Фильтр по типу события:
+
+```bash
+curl -i 'https://example.workers.dev/vk/logs?type=message_new&message_kind=photo' \
+  -H 'Authorization: Bearer <API_AUTH_TOKEN>'
+```
+
+## Ручной импорт архива из Google Drive
+
+Запуск: GitHub → Actions → `Import Google Drive archive` → `Run workflow`.
+
+Можно передать `google_drive_file_id` вручную при запуске или заранее задать repository variable `GOOGLE_DRIVE_FILE_ID`. Workflow распаковывает ZIP в корень репозитория, сохраняет сам workflow-файл и коммитит изменения в ветку `main`.

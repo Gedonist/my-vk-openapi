@@ -1,49 +1,79 @@
-// src/endpoints/vkLogs.ts
-import { OpenAPIRoute } from 'chanfana';
-import { z } from 'zod';
-import type { Context } from 'hono';
+import { OpenAPIRoute } from "chanfana";
+import { z } from "zod";
+import type { AppContext } from "../types";
+import { isAuthorized } from "../auth";
 
 export class VkLogsRoute extends OpenAPIRoute {
-    static schema = {
-        method: 'get',
-        path: '/vk/logs',
-        summary: 'Получить список всех VK вебхуков',
-        tags: ['VK'],
-        request: {
-            query: z.object({
-                limit: z.string().optional().default('50'),
-                type: z.string().optional(),
-            }),
-        },
-        responses: {
-            200: {
-                description: 'Список вебхуков',
-                content: {
-                    'application/json': {
-                        schema: z.object({
-                            success: z.boolean(),
-                            data: z.array(z.any()),
-                        }),
-                    },
-                },
-            },
-        },
-    };
+	static schema = {
+		method: "get",
+		path: "/vk/logs",
+		summary: "List stored VK callbacks",
+		tags: ["VK"],
+		request: {
+			query: z.object({
+				limit: z.string().optional().default("50"),
+				type: z.string().optional(),
+				message_kind: z.string().optional(),
+				token: z.string().optional(),
+			}),
+		},
+		responses: {
+			200: {
+				description: "Stored callbacks",
+				content: {
+					"application/json": {
+						schema: z.object({
+							success: z.boolean(),
+							data: z.array(z.any()),
+						}),
+					},
+				},
+			},
+			401: {
+				description: "Unauthorized",
+				content: {
+					"application/json": {
+						schema: z.object({ success: z.boolean(), error: z.string() }),
+					},
+				},
+			},
+		},
+	};
 
-    async handle(c: Context<{ Bindings: Env }>) {
-        const limit = parseInt(c.req.query('limit') || '50');
-        const typeFilter = c.req.query('type');
+	async handle(c: AppContext) {
+		if (!isAuthorized(c)) {
+			return c.json({ success: false, error: "Unauthorized" }, 401);
+		}
 
-        let query = `SELECT * FROM vk_webhooks ORDER BY received_at DESC LIMIT ?`;
-        const params: any[] = [limit];
+		const limit = Math.min(Math.max(parseInt(c.req.query("limit") || "50", 10) || 50, 1), 200);
+		const typeFilter = c.req.query("type");
+		const messageKindFilter = c.req.query("message_kind");
 
-        if (typeFilter) {
-            query = `SELECT * FROM vk_webhooks WHERE type = ? ORDER BY received_at DESC LIMIT ?`;
-            params.unshift(typeFilter);
-        }
+		const where: string[] = [];
+		const params: Array<string | number> = [];
 
-        const { results } = await c.env.DB.prepare(query).bind(...params).all();
+		if (typeFilter) {
+			where.push("type = ?");
+			params.push(typeFilter);
+		}
 
-        return c.json({ success: true, data: results });
-    }
+		if (messageKindFilter) {
+			where.push("message_kind = ?");
+			params.push(messageKindFilter);
+		}
+
+		params.push(limit);
+
+		const query = `
+			SELECT *
+			FROM vk_webhooks
+			${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+			ORDER BY received_at DESC
+			LIMIT ?
+		`;
+
+		const { results } = await c.env.DB.prepare(query).bind(...params).all();
+
+		return c.json({ success: true, data: results });
+	}
 }

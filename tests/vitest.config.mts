@@ -23,6 +23,9 @@ export default defineWorkersConfig({
 					compatibilityFlags: ["experimental", "nodejs_compat"],
 					bindings: {
 						MIGRATIONS: migrations,
+						API_AUTH_TOKEN: "test-api-token",
+						VK_CONFIRMATION_CODE: "test-confirmation-code",
+						VK_SECRET_TOKEN: "test-vk-secret",
 					},
 				},
 			},
