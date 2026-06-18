@@ -38,9 +38,9 @@ export class VkWebhookRoute extends OpenAPIRoute {
             const body = await c.req.json();
             const rawBody = JSON.stringify(body);
 
-            console.log(`VK Event: ${body.type}`, body);
+            console.log(`VK Event: ${body.type || 'unknown'}`, body);
 
-            // Сохраняем в D1
+            // Сохраняем в базу
             await c.env.DB.prepare(`
                 INSERT INTO vk_webhooks (type, group_id, raw_body)
                 VALUES (?, ?, ?)
