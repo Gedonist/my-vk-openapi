@@ -47,8 +47,8 @@ openapi.route("/tasks", tasksRouter);
 
 // Register other endpoints
 openapi.post("/dummy/:slug", DummyEndpoint);
-openapi.openapi(VkWebhookRoute).post('/vk', VkWebhookRoute.handle);   // или просто VkWebhookRoute
-openapi.openapi(VkLogsRoute).get('/vk/logs', VkLogsRoute.handle);
+openapi.post('/vk', VkWebhookRoute);      // ← вот так
+openapi.get('/vk/logs', VkLogsRoute);     // ← вот та
 
 
 
