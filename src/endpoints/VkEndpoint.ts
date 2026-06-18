@@ -1,10 +1,10 @@
-// src/endpoints/vkEndpoint.ts
+// src/endpoints/VkEndpoint.ts
 import { Request, Response } from 'express';
 
 /**
  * VK Callback endpoint для подтверждения вебхука
  */
-export const vkEndpoint = (req: Request, res: Response) => {
+export const VkEndpoint = (req: Request, res: Response) => {
     try {
         // Получаем тело запроса
         const { type, group_id } = req.body;
