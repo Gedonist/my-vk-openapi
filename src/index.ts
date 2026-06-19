@@ -40,15 +40,15 @@ const openapi = fromHono(app, {
 openapi.registry.registerComponent("securitySchemes", "BearerAuth", {
 	type: "http",
 	scheme: "bearer",
-	bearerFormat: "API_AUTH_TOKEN",
-	description: "Paste API_AUTH_TOKEN here to authorize protected service endpoints.",
+	bearerFormat: "VK_SECRET_TOKEN",
+	description: "Paste VK_SECRET_TOKEN here to authorize protected service endpoints. This is the same secret VK sends in callback bodies.",
 });
 
 openapi.registry.registerComponent("securitySchemes", "ApiTokenHeader", {
 	type: "apiKey",
 	in: "header",
 	name: "x-api-token",
-	description: "Alternative API_AUTH_TOKEN header.",
+	description: "Alternative header for VK_SECRET_TOKEN.",
 });
 
 openapi.post("/vk", VkWebhookRoute);

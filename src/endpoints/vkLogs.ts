@@ -8,7 +8,7 @@ export class VkLogsRoute extends OpenAPIRoute {
 		method: "get",
 		path: "/vk/logs",
 		summary: "List stored VK callbacks",
-		description: "Protected endpoint. Use Swagger Authorize with BearerAuth or ApiTokenHeader, or pass token as a query parameter for manual tests.",
+		description: "Protected endpoint. Use the same VK_SECRET_TOKEN that VK sends in callback bodies. Swagger Authorize supports BearerAuth or ApiTokenHeader; query token is kept only for manual curl tests.",
 		tags: ["VK"],
 		security: [{ BearerAuth: [] }, { ApiTokenHeader: [] }],
 		request: {

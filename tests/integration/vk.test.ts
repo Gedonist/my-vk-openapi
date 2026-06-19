@@ -2,7 +2,7 @@ import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 const authHeaders = {
-	Authorization: "Bearer test-api-token",
+	Authorization: "Bearer test-vk-secret",
 };
 
 describe("VK callback API", () => {
@@ -45,8 +45,8 @@ describe("VK callback API", () => {
 		expect(response.status).toBe(200);
 
 		const schema = await response.json<Record<string, any>>();
-		expect(schema.info.version).toBe("1.1.0");
-		expect(schema.components.securitySchemes.BearerAuth).toEqual(expect.objectContaining({ type: "http", scheme: "bearer" }));
+		expect(schema.info.version).toBe("v4");
+		expect(schema.components.securitySchemes.BearerAuth).toEqual(expect.objectContaining({ type: "http", scheme: "bearer", bearerFormat: "VK_SECRET_TOKEN" }));
 		expect(schema.paths["/vk"].post.requestBody.content["application/json"].examples.confirmation.value).toEqual(
 			expect.objectContaining({
 				type: "confirmation",
@@ -116,7 +116,7 @@ describe("VK callback API", () => {
 		expect(logs.data[0]).toEqual(expect.objectContaining({ secret_match: 0 }));
 	});
 
-	it("protects logs with API_AUTH_TOKEN", async () => {
+	it("protects logs with VK_SECRET_TOKEN", async () => {
 		const response = await SELF.fetch("http://local.test/vk/logs");
 
 		expect(response.status).toBe(401);
