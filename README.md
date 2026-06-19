@@ -120,7 +120,6 @@ curl -i -X POST 'https://example.workers.dev/vk' \
     }
   }'
 ```
-
 ### Картинка
 
 ```bash
