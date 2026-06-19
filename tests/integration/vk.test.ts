@@ -21,6 +21,41 @@ describe("VK callback API", () => {
 		expect(await response.text()).toBe("test-confirmation-code");
 	});
 
+	it("accepts confirmation JSON copied with non-breaking spaces in the raw body", async () => {
+		const rawBody = `{
+  "group_id": 1,
+  "event_id": "dbc09585a0d30bc681b09c2849100fcd7ac1f389",
+  "v": "5.199",
+  "type": "confirmation",
+  "secret": "test-vk-secret"
+}`;
+
+		const response = await SELF.fetch("http://local.test/vk", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: rawBody,
+		});
+
+		expect(response.status).toBe(200);
+		expect(await response.text()).toBe("test-confirmation-code");
+	});
+
+	it("exposes API version, authorization schemes, and body examples in OpenAPI", async () => {
+		const response = await SELF.fetch("http://local.test/openapi.json");
+		expect(response.status).toBe(200);
+
+		const schema = await response.json<Record<string, any>>();
+		expect(schema.info.version).toBe("1.1.0");
+		expect(schema.components.securitySchemes.BearerAuth).toEqual(expect.objectContaining({ type: "http", scheme: "bearer" }));
+		expect(schema.paths["/vk"].post.requestBody.content["application/json"].examples.confirmation.value).toEqual(
+			expect.objectContaining({
+				type: "confirmation",
+				group_id: 123456789,
+				secret: "vk_callback_secret_from_cloudflare",
+			}),
+		);
+	});
+
 	it("stores text messages and prepares a template reply", async () => {
 		const response = await SELF.fetch("http://local.test/vk", {
 			method: "POST",

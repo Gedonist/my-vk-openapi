@@ -1,5 +1,6 @@
 {
 	"name": "my-vk-openapi",
+	"version": "1.1.0",
 	"description": "Cloudflare Worker for VK Callback API events with D1 logging and template replies.",
 	"dependencies": {
 		"chanfana": "2.8.3",

@@ -4,11 +4,13 @@ import type { AppContext } from "../types";
 import { isAuthorized } from "../auth";
 
 export class VkLogsRoute extends OpenAPIRoute {
-	static schema = {
+	schema = {
 		method: "get",
 		path: "/vk/logs",
 		summary: "List stored VK callbacks",
+		description: "Protected endpoint. Use Swagger Authorize with BearerAuth or ApiTokenHeader, or pass token as a query parameter for manual tests.",
 		tags: ["VK"],
+		security: [{ BearerAuth: [] }, { ApiTokenHeader: [] }],
 		request: {
 			query: z.object({
 				limit: z.string().optional().default("50"),
